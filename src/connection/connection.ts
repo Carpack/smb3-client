@@ -88,6 +88,7 @@ export class Connection extends EventEmitter {
 
   async open(opts: ConnectionOpenOptions = {}): Promise<NegotiatedConnection> {
     const dialects = opts.dialects ?? [
+      Dialect.SMB_2_0_2,
       Dialect.SMB_2_1_0,
       Dialect.SMB_3_0_0,
       Dialect.SMB_3_0_2,
@@ -144,10 +145,13 @@ export class Connection extends EventEmitter {
     const messageId = this.nextMessageId++;
     const flags = opts.flags ?? 0;
     const wantEncrypt = opts.encrypt === true && this.encryptor !== null;
+    // SMB 2.0.2 has no multi-credit requests: CreditCharge is reserved and must be 0
+    // (MS-SMB2 §2.2.1.2); the request still uses its one credit (taken above).
+    const headerCharge = this.negotiated?.dialect === Dialect.SMB_2_0_2 ? 0 : charge;
 
     let header = encodeHeader({
       command,
-      creditCharge: charge,
+      creditCharge: headerCharge,
       creditRequestResponse: 1,
       flags,
       messageId,
@@ -162,7 +166,7 @@ export class Connection extends EventEmitter {
       const signedFlags = flags | HeaderFlag.SIGNED;
       header = encodeHeader({
         command,
-        creditCharge: charge,
+        creditCharge: headerCharge,
         creditRequestResponse: 1,
         flags: signedFlags,
         messageId,
